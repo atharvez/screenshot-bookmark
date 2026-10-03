@@ -6,9 +6,12 @@ from pathlib import Path
 from typing import Optional
 import time
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from .database import Database, Bookmark
 from .ocr import OCRProcessor
-from .analyzer import ClaudeAnalyzer
+from .analyzer import GeminiAnalyzer
 from .watcher import FolderWatcher
 
 logger = logging.getLogger(__name__)
@@ -22,7 +25,7 @@ def setup_logging(verbose: bool = False):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-def process_screenshot(image_path: str, db: Database, analyzer: ClaudeAnalyzer,
+def process_screenshot(image_path: str, db: Database, analyzer: GeminiAnalyzer,
                       ocr_processor: Optional[OCRProcessor] = None) -> bool:
     """
     Process a single screenshot through the pipeline.
@@ -56,8 +59,8 @@ def process_screenshot(image_path: str, db: Database, analyzer: ClaudeAnalyzer,
             # Still create a bookmark with empty OCR text
             ocr_text = ""
 
-        # Analyze with Claude
-        logger.debug("Analyzing with Claude API...")
+        # Analyze with Gemini
+        logger.debug("Analyzing with Gemini API...")
         metadata = analyzer.analyze_ocr_text(ocr_text, image_path)
 
         # Create bookmark
@@ -91,7 +94,7 @@ def cmd_init(args):
 def cmd_add(args):
     """Add a screenshot to the bookmark database."""
     db = Database(args.db_path)
-    analyzer = ClaudeAnalyzer(api_key=args.api_key)
+    analyzer = GeminiAnalyzer(api_key=args.api_key)
     # Get args with defaults if they don't exist (for subcommand compatibility)
     ocr_lang = getattr(args, 'ocr_lang', 'eng')
     mock_ocr = getattr(args, 'mock_ocr', False)
@@ -170,7 +173,7 @@ def cmd_stats(args):
 def cmd_watch(args):
     """Watch a folder for new screenshots."""
     db = Database(args.db_path)
-    analyzer = ClaudeAnalyzer(api_key=args.api_key)
+    analyzer = GeminiAnalyzer(api_key=args.api_key)
     # Get args with defaults if they don't exist (for subcommand compatibility)
     ocr_lang = getattr(args, 'ocr_lang', 'eng')
     mock_ocr = getattr(args, 'mock_ocr', False)
@@ -205,7 +208,7 @@ def main():
     )
     parser.add_argument(
         "--api-key",
-        help="Claude API key (can also use ANTHROPIC_API_KEY environment variable)"
+        help="Gemini API key (can also use GOOGLE_API_KEY or GEMINI_API_KEY environment variables)"
     )
     parser.add_argument(
         "-v", "--verbose",

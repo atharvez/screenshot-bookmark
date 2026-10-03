@@ -1,5 +1,7 @@
 """OCR extraction module for screenshots."""
 import logging
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +12,21 @@ try:
     import pytesseract
     from PIL import Image
     TESSERACT_AVAILABLE = True
+
+    # Try to find tesseract executable on Windows
+    if sys.platform == 'win32':
+        # Common Tesseract installation paths on Windows
+        tesseract_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+            r'C:\Tesseract-OCR\tesseract.exe',
+            r'C:\Users\7atha\AppData\Local\Programs\Tesseract-OCR\tesseract.exe',
+        ]
+        for tpath in tesseract_paths:
+            if os.path.exists(tpath):
+                pytesseract.pytesseract.tesseract_cmd = tpath
+                logger.info(f"Found Tesseract at: {tpath}")
+                break
 except ImportError:
     TESSERACT_AVAILABLE = False
     logger.warning("pytesseract or PIL not installed. OCR functionality will be limited.")

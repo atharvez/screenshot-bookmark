@@ -1,11 +1,28 @@
-"""Claude API analyzer for extracting metadata from OCR text."""
-import anthropic
+"""Google Gemini analyzer for extracting metadata from OCR text."""
 import json
 import logging
+import os
 from typing import Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+
+try:
+    import google.generativeai as genai
+except ImportError:  # pragma: no cover - allow import without the package for tooling
+    genai = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+# Default Gemini model. Override with the GEMINI_MODEL env var or the
+# ``model`` constructor argument.
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+SYSTEM_INSTRUCTION = (
+    "You are an expert at extracting structured information from screenshot OCR "
+    "text. Your task is to identify the title, URL, description, and relevant "
+    "tags for a bookmark. Be concise and accurate. If information is not "
+    "present, leave fields empty."
+)
+
 
 @dataclass
 class BookmarkMetadata:
@@ -15,20 +32,54 @@ class BookmarkMetadata:
     description: str = ""
     tags: str = ""  # comma-separated tags
 
-class ClaudeAnalyzer:
-    """Analyzes OCR text using Claude API to extract bookmark metadata."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-opus-5"):
+class GeminiAnalyzer:
+    """Analyzes OCR text using the Google Gemini API to extract bookmark metadata."""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = DEFAULT_MODEL,
+    ):
         """
-        Initialize the Claude analyzer.
+        Initialize the Gemini analyzer.
 
         Args:
-            api_key: Optional API key (if not provided, uses environment)
-            model: Claude model to use (default: claude-opus-5)
+            api_key: Optional API key. If not provided, falls back to
+                ``GOOGLE_API_KEY`` or ``GEMINI_API_KEY`` env vars.
+            model: Gemini model name (default: ``gemini-2.0-flash``).
         """
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = model
-        logger.info(f"Initialized ClaudeAnalyzer with model {model}")
+        if genai is None:
+            raise ImportError(
+                "google-generativeai is not installed. "
+                "Install it with: pip install google-generativeai"
+            )
+
+        resolved_key = (
+            api_key
+            or os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+        )
+        self.model_name = model
+        self._model = None
+        self.has_api_key = False
+
+        if resolved_key:
+            try:
+                genai.configure(api_key=resolved_key)
+                self._model = genai.GenerativeModel(
+                    model_name=model,
+                    generation_config={
+                        "response_mime_type": "application/json",
+                        "max_output_tokens": 1000,
+                    },
+                )
+                self.has_api_key = True
+                logger.info(f"Initialized GeminiAnalyzer with model {model}")
+            except Exception as e:
+                logger.warning(f"Failed to configure Gemini model {model}: {e}. Falling back to heuristic analysis.")
+        else:
+            logger.info("No Gemini API key provided. Operating in heuristic metadata extraction mode.")
 
     def analyze_ocr_text(self, ocr_text: str, image_path: str = "") -> BookmarkMetadata:
         """
@@ -45,50 +96,109 @@ class ClaudeAnalyzer:
             logger.warning("Empty OCR text provided")
             return BookmarkMetadata()
 
-        # Truncate very long OCR text to avoid excessive token usage
-        # Claude Opus 5 supports up to 200K context, but we'll be conservative
+        # Truncate very long OCR text to avoid excessive token usage.
+        # Gemini 2.0 Flash supports 1M context, but we stay conservative.
         max_ocr_length = 8000  # chars
         if len(ocr_text) > max_ocr_length:
             logger.info(f"Truncating OCR text from {len(ocr_text)} to {max_ocr_length} chars")
             ocr_text = ocr_text[:max_ocr_length] + "..."
 
+        if not self._model or not self.has_api_key:
+            return self._heuristic_analysis(ocr_text, image_path)
+
         prompt = self._build_analysis_prompt(ocr_text, image_path)
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1000,  # We expect a relatively short response
-                thinking={"type": "adaptive"},
-                system="You are an expert at extracting structured information from screenshot OCR text. "
-                       "Your task is to identify the title, URL, description, and relevant tags for a bookmark. "
-                       "Be concise and accurate. If information is not present, leave fields empty.",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
+            response = self._model.generate_content(
+                [SYSTEM_INSTRUCTION, prompt]
             )
-
-            # Extract the text response
-            response_text = ""
-            for block in response.content:
-                if block.type == "text":
-                    response_text = block.text
-                    break
-
-            # Parse the JSON response
+            response_text = response.text or ""
             metadata = self._parse_response(response_text)
+            if not metadata.title and not metadata.url:
+                # If Gemini returned empty data, use heuristic extraction
+                return self._heuristic_analysis(ocr_text, image_path)
             logger.info(f"Extracted metadata: {metadata}")
             return metadata
 
         except Exception as e:
-            logger.exception(f"Claude API analysis failed: {e}")
-            # Return empty metadata on failure
-            return BookmarkMetadata()
+            logger.warning(f"Gemini API analysis failed: {e}. Falling back to heuristic extraction.")
+            return self._heuristic_analysis(ocr_text, image_path)
+
+    def _heuristic_analysis(self, ocr_text: str, image_path: str = "") -> BookmarkMetadata:
+        """Extract metadata using heuristic rules and regex when AI is not configured or fails."""
+        import re
+
+        lines = [line.strip() for line in ocr_text.splitlines() if line.strip()]
+        if not lines:
+            title = Path(image_path).stem.replace('_', ' ').replace('-', ' ').title() if image_path else "Untitled Bookmark"
+            return BookmarkMetadata(title=title)
+
+        # 1. Look for URL
+        url = ""
+        url_match = re.search(r'https?://[^\s<>"{}|\\^`]+', ocr_text)
+        if url_match:
+            url = url_match.group(0).rstrip('.,;:)]>')
+        else:
+            www_match = re.search(r'(?:www\.)[^\s<>"{}|\\^`]+', ocr_text)
+            if www_match:
+                url = "https://" + www_match.group(0).rstrip('.,;:)]>')
+
+        # 2. Extract Title (first line that looks like a title, ignoring pure URLs or timestamps)
+        title_candidates = []
+        for line in lines:
+            clean = re.sub(r'https?://\S+', '', line).strip()
+            if len(clean) >= 3 and not re.match(r'^\d+[\s:\-/.]*\d*$', clean):
+                title_candidates.append(clean)
+
+        if title_candidates:
+            title = title_candidates[0]
+            if len(title) > 90:
+                title = title[:87] + "..."
+        elif image_path:
+            title = Path(image_path).stem.replace('_', ' ').replace('-', ' ').title()
+        else:
+            title = "Untitled Bookmark"
+
+        # 3. Extract Description (next 1-2 lines)
+        desc_lines = []
+        for line in title_candidates[1:4]:
+            if line != title and not line.startswith('http'):
+                desc_lines.append(line)
+        description = " ".join(desc_lines)
+        if len(description) > 200:
+            description = description[:197] + "..."
+
+        # 4. Extract Tags from keywords
+        text_lower = ocr_text.lower()
+        keyword_map = [
+            ("python", "python"), ("javascript", "javascript"), ("typescript", "typescript"),
+            ("react", "react"), ("github", "github"), ("docker", "docker"), ("api", "api"),
+            ("ai", "ai"), ("machine learning", "machine-learning"), ("tutorial", "tutorial"),
+            ("guide", "guide"), ("documentation", "docs"), ("article", "article"),
+            ("news", "news"), ("recipe", "recipe"), ("shopping", "shopping"),
+            ("youtube", "video"), ("twitter", "social"), ("reddit", "community"),
+            ("design", "design"), ("css", "css"), ("html", "web"), ("database", "database"),
+            ("linux", "linux"), ("windows", "windows"), ("security", "security")
+        ]
+        tags = []
+        for kw, tag in keyword_map:
+            if re.search(r'\b' + re.escape(kw) + r'\b', text_lower):
+                tags.append(tag)
+
+        if not tags and title:
+            words = [w.lower() for w in re.findall(r'[a-zA-Z]{4,}', title)]
+            if words:
+                tags.append(words[0])
+
+        return BookmarkMetadata(
+            title=title,
+            url=url,
+            description=description,
+            tags=",".join(tags[:5])
+        )
 
     def _build_analysis_prompt(self, ocr_text: str, image_path: str) -> str:
-        """Build the prompt for Claude analysis."""
+        """Build the prompt for Gemini analysis."""
         return f"""
 Analyze the following OCR text extracted from a screenshot and extract bookmark metadata.
 
@@ -117,19 +227,21 @@ Example response:
 """.strip()
 
     def _parse_response(self, response_text: str) -> BookmarkMetadata:
-        """Parse Claude's JSON response into BookmarkMetadata."""
+        """Parse Gemini's JSON response into BookmarkMetadata."""
         try:
-            # Find JSON in the response (handle cases where Claude might add extra text)
+            # With response_mime_type=application/json, the response is usually
+            # already a clean JSON object, but be defensive in case the model
+            # wraps it.
             json_start = response_text.find('{')
             json_end = response_text.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
                 json_str = response_text[json_start:json_end]
                 data = json.loads(json_str)
                 return BookmarkMetadata(
-                    title=data.get('title', '').strip(),
-                    url=data.get('url', '').strip(),
-                    description=data.get('description', '').strip(),
-                    tags=data.get('tags', '').strip()
+                    title=str(data.get('title', '')).strip(),
+                    url=str(data.get('url', '')).strip(),
+                    description=str(data.get('description', '')).strip(),
+                    tags=str(data.get('tags', '')).strip(),
                 )
             else:
                 logger.warning(f"No JSON found in response: {response_text}")
@@ -141,7 +253,13 @@ Example response:
             logger.exception(f"Unexpected error parsing response: {e}")
             return BookmarkMetadata()
 
-# Convenience function for simple usage
+
+# Backwards-compatible aliases — older code (and the CLI/web modules) imported
+# ``ClaudeAnalyzer`` and the ``analyze_screenshot`` helper. Keep them around
+# so the swap is non-breaking at the call sites.
+ClaudeAnalyzer = GeminiAnalyzer
+
+
 def analyze_screenshot(ocr_text: str, image_path: str = "", api_key: Optional[str] = None) -> BookmarkMetadata:
     """
     Analyze screenshot OCR text to extract bookmark metadata.
@@ -149,10 +267,10 @@ def analyze_screenshot(ocr_text: str, image_path: str = "", api_key: Optional[st
     Args:
         ocr_text: Text extracted from screenshot
         image_path: Path to the screenshot file
-        api_key: Optional Claude API key
+        api_key: Optional Gemini API key (falls back to GOOGLE_API_KEY env var)
 
     Returns:
         BookmarkMetadata with extracted information
     """
-    analyzer = ClaudeAnalyzer(api_key=api_key)
+    analyzer = GeminiAnalyzer(api_key=api_key)
     return analyzer.analyze_ocr_text(ocr_text, image_path)

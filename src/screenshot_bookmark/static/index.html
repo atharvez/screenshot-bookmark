@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screenshot Bookmark Hub</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 10px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }
+
+    header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-outline { background: white; border-color: var(--border); color: var(--text); }
+    .btn-outline:hover { background: #f1f5f9; }
+
+    .container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Stats Row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-card .label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; color: var(--text); margin-top: 4px; }
+
+    /* Search & Filter Bar */
+    .controls-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+    .tag-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag-chip {
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 12px;
+      background: #f1f5f9;
+      color: #334155;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.12s;
+    }
+
+    .tag-chip:hover, .tag-chip.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    /* Bookmarks Grid */
+    .bookmarks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .bm-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .bm-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+    }
+
+    .bm-image-wrap {
+      width: 100%;
+      height: 180px;
+      background: #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .bm-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.2s;
+    }
+
+    .bm-card:hover .bm-image { transform: scale(1.02); }
+
+    .bm-placeholder {
+      font-size: 40px;
+      color: var(--text-muted);
+    }
+
+    .bm-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .bm-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      line-height: 1.3;
+    }
+    .bm-title:hover { color: var(--primary); text-decoration: underline; }
+
+    .bm-url {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bm-desc {
+      font-size: 13px;
+      color: #475569;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .bm-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fafbfc;
+    }
+
+    .bm-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .bm-tag {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: #e0f2fe;
+      color: #0369a1;
+      font-weight: 500;
+    }
+
+    .bm-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .action-icon {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+    .action-icon:hover { background: #e2e8f0; color: var(--text); }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      backdrop-filter: blur(2px);
+    }
+    .modal-backdrop.hidden { display: none; }
+
+    .modal-box {
+      background: white;
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 520px;
+      padding: 24px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 { font-size: 18px; }
+    .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); }
+
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 12px; font-weight: 600; color: #475569; }
+    .form-group input, .form-group textarea {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    /* Lightbox */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      cursor: zoom-out;
+    }
+    .lightbox.hidden { display: none; }
+    .lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span style="font-size: 24px;">📸</span>
+      <h1>Screenshot Bookmark Hub</h1>
+    </div>
+    <div class="header-actions">
+      <button id="addBookmarkBtn" class="btn btn-primary">+ Add Bookmark</button>
+      <button id="exportBtn" class="btn btn-outline">⬇️ Export</button>
+      <a href="https://github.com/yourusername/screenshot-bookmark" target="_blank" class="btn btn-outline">⭐ GitHub</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Stats Row -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">Total Bookmarks</div>
+        <div id="statTotal" class="value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">With Web Link</div>
+        <div id="statWithUrl" class="value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Unique Tags</div>
+        <div id="statTags" class="value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Database Size</div>
+        <div id="statDbSize" class="value">0 KB</div>
+      </div>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="controls-card">
+      <div class="search-row">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search full-text, titles, URLs, OCR content...">
+      </div>
+      <div id="tagChipsContainer" class="tag-chips"></div>
+    </div>
+
+    <!-- Bookmarks Grid -->
+    <div id="bookmarksContainer" class="bookmarks-grid"></div>
+  </main>
+
+  <!-- Add Bookmark Modal -->
+  <div id="addModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Add New Bookmark</h2>
+        <button id="closeAddModal" class="modal-close">&times;</button>
+      </div>
+      <div class="form-group">
+        <label>URL (Required):</label>
+        <input type="text" id="newUrl" placeholder="https://example.com/article">
+      </div>
+      <div class="form-group">
+        <label>Title (Optional):</label>
+        <input type="text" id="newTitle" placeholder="My Bookmark Title">
+      </div>
+      <div class="form-group">
+        <label>Tags (Comma-separated):</label>
+        <input type="text" id="newTags" placeholder="tech, tutorial, ai">
+      </div>
+      <div class="form-group">
+        <label>Notes / Description:</label>
+        <textarea id="newDesc" rows="3" placeholder="Key summary or highlights..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Or Upload Screenshot:</label>
+        <input type="file" id="newScreenshot" accept="image/*">
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+        <button id="cancelAddModal" class="btn btn-outline">Cancel</button>
+        <button id="submitAddModal" class="btn btn-primary">Save Bookmark</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" class="lightbox hidden">
+    <img id="lightboxImg" src="" alt="Screenshot Full Preview">
+  </div>
+
+  <script>
+    let activeTag = null;
+    let searchDebounce = null;
+
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/stats');
+        if (res.ok) {
+          const stats = await res.json();
+          document.getElementById('statTotal').textContent = stats.total_bookmarks;
+          document.getElementById('statWithUrl').textContent = stats.with_url;
+          document.getElementById('statTags').textContent = stats.unique_tags;
+          document.getElementById('statDbSize').textContent = Math.round(stats.database_size / 1024) + ' KB';
+        }
+      } catch (e) {
+        console.error('Stats error:', e);
+      }
+    }
+
+    async function loadTags() {
+      try {
+        const res = await fetch('/api/tags');
+        if (res.ok) {
+          const data = await res.json();
+          const container = document.getElementById('tagChipsContainer');
+          if (!data.tags || data.tags.length === 0) {
+            container.innerHTML = '<span style="font-size:12px; color:#94a3b8;">No tags yet</span>';
+            return;
+          }
+          container.innerHTML = data.tags.slice(0, 20).map(tag => `
+            <span class="tag-chip ${activeTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>
+          `).join('');
+
+          container.querySelectorAll('.tag-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+              const tag = chip.getAttribute('data-tag');
+              if (activeTag === tag) {
+                activeTag = null;
+                chip.classList.remove('active');
+                loadBookmarks();
+              } else {
+                activeTag = tag;
+                container.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                loadBookmarks('', tag);
+              }
+            });
+          });
+        }
+      } catch (e) {
+        console.error('Tags error:', e);
+      }
+    }
+
+    async function loadBookmarks(q = '', tag = '') {
+      const container = document.getElementById('bookmarksContainer');
+      let url = '/api/recent?limit=50';
+      if (tag) {
+        url = `/api/search?tag=${encodeURIComponent(tag)}`;
+      } else if (q) {
+        url = `/api/search?q=${encodeURIComponent(q)}`;
+      }
+
+      container.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:#94a3b8;">Loading bookmarks...</div>';
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('API error');
+        const data = await res.json();
+        const items = q || tag ? data.results : data;
+
+        if (!items || items.length === 0) {
+          container.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding: 60px; color:#94a3b8;">No bookmarks found. Add one above or via the browser extension!</div>';
+          return;
+        }
+
+        container.innerHTML = items.map(b => {
+          let domain = '';
+          try {
+            if (b.url) domain = new URL(b.url).hostname.replace('www.', '');
+          } catch(e) {
+            domain = b.url || '';
+          }
+
+          const tags = (b.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+
+          return `
+            <div class="bm-card" data-id="${b.id}">
+              <div class="bm-image-wrap" data-img="${b.image_url || ''}">
+                ${b.image_url
+                  ? `<img src="${b.image_url}" class="bm-image" alt="Screenshot preview" onerror="this.parentElement.innerHTML='<span class=\\'bm-placeholder\\'>🌐</span>'">`
+                  : '<span class="bm-placeholder">🔖</span>'}
+              </div>
+              <div class="bm-body">
+                <a href="${b.url || '#'}" target="_blank" class="bm-title">${escapeHtml(b.title || 'Untitled')}</a>
+                ${domain ? `<span class="bm-url">${escapeHtml(domain)}</span>` : ''}
+                ${b.description ? `<p class="bm-desc">${escapeHtml(b.description)}</p>` : ''}
+              </div>
+              <div class="bm-footer">
+                <div class="bm-tags">
+                  ${tags.map(t => `<span class="bm-tag">${escapeHtml(t)}</span>`).join('')}
+                </div>
+                <div class="bm-actions">
+                  ${b.url ? `<button class="action-icon copy-btn" data-url="${escapeHtml(b.url)}" title="Copy Link">📋</button>` : ''}
+                  <button class="action-icon delete-btn" data-id="${b.id}" title="Delete Bookmark">🗑️</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Attach listeners
+        container.querySelectorAll('.bm-image-wrap').forEach(wrap => {
+          wrap.addEventListener('click', () => {
+            const imgUrl = wrap.getAttribute('data-img');
+            if (imgUrl) {
+              document.getElementById('lightboxImg').src = imgUrl;
+              document.getElementById('lightbox').classList.remove('hidden');
+            }
+          });
+        });
+
+        container.querySelectorAll('.copy-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const url = btn.getAttribute('data-url');
+            if (url) {
+              await navigator.clipboard.writeText(url);
+              btn.textContent = '✓';
+              setTimeout(() => { btn.textContent = '📋'; }, 1200);
+            }
+          });
+        });
+
+        container.querySelectorAll('.delete-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            if (id && confirm('Delete this bookmark?')) {
+              await fetch(`/api/bookmark/${id}`, { method: 'DELETE' });
+              loadStats();
+              loadTags();
+              loadBookmarks(document.getElementById('searchInput').value, activeTag);
+            }
+          });
+        });
+
+      } catch (err) {
+        container.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:#ef4444;">Failed to load bookmarks.</div>';
+      }
+    }
+
+    // Search input
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        activeTag = null;
+        document.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('active'));
+        loadBookmarks(e.target.value.trim());
+      }, 250);
+    });
+
+    // Lightbox
+    document.getElementById('lightbox').addEventListener('click', () => {
+      document.getElementById('lightbox').classList.add('hidden');
+    });
+
+    // Export button
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      window.location.href = '/api/export?format=html';
+    });
+
+    // Add Bookmark Modal
+    const addModal = document.getElementById('addModal');
+    document.getElementById('addBookmarkBtn').addEventListener('click', () => {
+      addModal.classList.remove('hidden');
+    });
+    document.getElementById('closeAddModal').addEventListener('click', () => addModal.classList.add('hidden'));
+    document.getElementById('cancelAddModal').addEventListener('click', () => addModal.classList.add('hidden'));
+
+    document.getElementById('submitAddModal').addEventListener('click', async () => {
+      const url = document.getElementById('newUrl').value.trim();
+      const title = document.getElementById('newTitle').value.trim();
+      const tags = document.getElementById('newTags').value.trim();
+      const desc = document.getElementById('newDesc').value.trim();
+      const fileInput = document.getElementById('newScreenshot');
+
+      if (!url && !fileInput.files[0]) {
+        alert('Please enter a URL or choose a screenshot.');
+        return;
+      }
+
+      if (fileInput.files[0]) {
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        if (url) formData.append('url', url);
+        if (title) formData.append('title', title);
+        if (tags) formData.append('tags', tags);
+        if (desc) formData.append('description', desc);
+
+        await fetch('/api/upload', { method: 'POST', body: formData });
+      } else {
+        await fetch('/api/bookmarks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, title, tags, description: desc })
+        });
+      }
+
+      addModal.classList.add('hidden');
+      document.getElementById('newUrl').value = '';
+      document.getElementById('newTitle').value = '';
+      document.getElementById('newTags').value = '';
+      document.getElementById('newDesc').value = '';
+      fileInput.value = '';
+
+      loadStats();
+      loadTags();
+      loadBookmarks();
+    });
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Initial load
+    loadStats();
+    loadTags();
+    loadBookmarks();
+  </script>
+</body>
+</html>

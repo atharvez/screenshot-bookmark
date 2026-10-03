@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from screenshot_bookmark.database import Database
 from screenshot_bookmark.ocr import OCRProcessor
-from screenshot_bookmark.analyzer import ClaudeAnalyzer
+from screenshot_bookmark.analyzer import GeminiAnalyzer
 
 def example_usage():
     """Demonstrate how to use the screenshot-bookmark components."""
@@ -42,16 +42,16 @@ def example_usage():
             print("  (This is expected if Tesseract/EasyOCR not installed)")
             ocr_processor = None
 
-        # Initialize Claude analyzer (will need API key for real usage)
+        # Initialize Gemini analyzer (will need API key for real usage)
         # For this example, we'll show the structure but won't make actual API calls
         try:
             # In real usage, you would provide an API key:
-            # analyzer = ClaudeAnalyzer(api_key=os.getenv("ANTHROPIC_API_KEY"))
-            analyzer = ClaudeAnalyzer()  # Will use environment variable
-            print("[OK] Claude analyzer initialized")
+            # analyzer = GeminiAnalyzer(api_key=os.getenv("GOOGLE_API_KEY"))
+            analyzer = GeminiAnalyzer()  # Will use environment variable
+            print("[OK] Gemini analyzer initialized")
         except Exception as e:
-            print(f"[WARN] Claude analyzer initialization failed: {e}")
-            print("  (This is expected if ANTHROPIC_API_KEY not set)")
+            print(f"[WARN] Gemini analyzer initialization failed: {e}")
+            print("  (This is expected if GOOGLE_API_KEY not set)")
             analyzer = None
 
         # Show database stats
@@ -109,7 +109,7 @@ def example_usage():
         print(f"\n[SUCCESS] Example completed successfully!")
         print(f"\nTo use with real screenshots:")
         print(f"  1. Install Tesseract OCR: https://github.com/tesseract-ocr/tesseract")
-        print(f"  2. Set your Claude API key: export ANTHROPIC_API_KEY='your-key-here'")
+        print(f"  2. Set your Gemini API key: export GOOGLE_API_KEY='your-key-here'")
         print(f"  3. Run: screenshot-bookmark watch ~/Pictures/Screenshots")
 
     finally:

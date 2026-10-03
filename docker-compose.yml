@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  screenshot-bookmark:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - bookmark-data:/data
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DB_PATH=/data/bookmarks.db
+      - UPLOAD_DIR=/data/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  bookmark-data:
+    driver: local
